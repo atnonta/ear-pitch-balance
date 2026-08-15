@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ear Balance — 左右ピッチ補正プレーヤー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #16181A;
+    --panel: #1F2225;
+    --panel-raised: #272B2E;
+    --line: #34393D;
+    --text: #EDEAE3;
+    --text-dim: #8B9096;
+    --l-color: #3D8FA6;   /* left channel — cool teal */
+    --r-color: #E8A33D;   /* right channel — warm amber */
+    --danger: #D6547A;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100vh;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #202327 0%, var(--bg) 60%);
+    color:var(--text);
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family:'Space Mono', monospace; }
+
+  .wrap{
+    max-width:720px;
+    margin:0 auto;
+    padding:40px 20px 80px;
+  }
+
+  .eyebrow{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    letter-spacing:.18em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:14px;
+  }
+  .eyebrow::before{
+    content:"";
+    width:18px; height:1px; background:var(--text-dim);
+  }
+
+  h1{
+    font-weight:900;
+    font-size:clamp(26px, 5vw, 36px);
+    line-height:1.35;
+    margin:0 0 10px;
+    letter-spacing:.01em;
+  }
+  h1 span{ color:var(--r-color); }
+
+  p.lead{
+    color:var(--text-dim);
+    font-size:14.5px;
+    line-height:1.9;
+    margin:0 0 34px;
+    max-width:56ch;
+  }
+
+  /* ---- panel shell ---- */
+  .panel{
+    background:linear-gradient(180deg, var(--panel-raised), var(--panel));
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px;
+    margin-bottom:18px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03) inset, 0 20px 40px -20px rgba(0,0,0,0.6);
+  }
+  .panel-label{
+    font-family:'Space Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:.14em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    margin-bottom:16px;
+  }
+
+  /* ---- drop / file zone ---- */
+  .dropzone{
+    border:1px dashed var(--line);
+    border-radius:8px;
+    padding:22px;
+    display:flex; align-items:center; gap:16px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .dropzone:hover, .dropzone.drag{
+    border-color:var(--r-color);
+    background:rgba(232,163,61,0.04);
+  }
+  .dropzone input{ display:none; }
+  .reel{
+    width:40px; height:40px; flex:none;
+    border-radius:50%;
+    border:2px solid var(--text-dim);
+    position:relative;
+  }
+  .reel::before{
+    content:"";
+    position:absolute; inset:14px;
+    border-radius:50%;
+    background:var(--text-dim);
+  }
+  .dz-text b{ display:block; font-size:14px; margin-bottom:3px; }
+  .dz-text span{ font-size:12.5px; color:var(--text-dim); }
+
+  .fileinfo{
+    margin-top:14px;
+    font-family:'Space Mono', monospace;
+    font-size:12px;
+    color:var(--text-dim);
+    display:none;
+  }
+  .fileinfo.show{ display:block; }
+  .fileinfo b{ color:var(--text); font-weight:400; }
+
+  /* ---- balance meter (signature element) ---- */
+  .meter{
+    margin-top:20px;
+  }
+  .meter-scale{
+    position:relative;
+    height:46px;
+    border-radius:6px;
+    background:var(--bg);
+    border:1px solid var(--line);
+    overflow:hidden;
+  }
+  .meter-ticks{
+    position:absolute; inset:0;
+    display:flex; justify-content:space-between;
+    padding:0 3px;
+  }
+  .meter-ticks i{
+    width:1px; background:var(--line); margin-top:6px; height:34px;
+  }
+  .meter-ticks i:nth-child(11){ background:var(--text-dim); width:1px; }
+  .meter-center{
+    position:absolute; left:50%; top:0; bottom:0; width:1px;
+    background:var(--text-dim);
+  }
+  .needle{
+    position:absolute; top:6px; bottom:6px; width:3px;
+    border-radius:2px;
+    transition:left .12s ease;
+  }
+  .needle.l{ background:var(--l-color); box-shadow:0 0 8px var(--l-color); }
+  .needle.r{ background:var(--r-color); box-shadow:0 0 8px var(--r-color); }
+  .meter-labels{
+    display:flex; justify-content:space-between;
+    font-family:'Space Mono', monospace;
+    font-size:10px; color:var(--text-dim);
+    margin-top:6px;
+  }
+
+  /* ---- channel modules ---- */
+  .channels{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    margin-top:20px;
+  }
+  @media (max-width:520px){ .channels{ grid-template-columns:1fr; } }
+
+  .channel{
+    background:var(--bg);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:16px 16px 18px;
+  }
+  .channel.l{ border-top:2px solid var(--l-color); }
+  .channel.r{ border-top:2px solid var(--r-color); }
+
+  .ch-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:10px;
+  }
+  .ch-head .name{ font-weight:700; font-size:13.5px; }
+  .channel.l .name{ color:var(--l-color); }
+  .channel.r .name{ color:var(--r-color); }
+  .ch-head .value{
+    font-family:'Space Mono', monospace;
+    font-size:18px;
+    font-weight:700;
+  }
+  .ch-head .value .u{ font-size:11px; color:var(--text-dim); font-weight:400; margin-left:2px; }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:26px;
+    background:transparent;
+    cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:4px; border-radius:2px;
+    background:var(--line);
+  }
+  input[type=range]::-moz-range-track{
+    height:4px; border-radius:2px;
+    background:var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:16px; height:26px;
+    margin-top:-11px;
+    border-radius:4px;
+    background:var(--text);
+    border:1px solid var(--line);
+    box-shadow:0 2px 6px rgba(0,0,0,.5);
+  }
+  .channel.l input[type=range]::-webkit-slider-thumb{ background:var(--l-color); }
+  .channel.r input[type=range]::-webkit-slider-thumb{ background:var(--r-color); }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:26px; border:none; border-radius:4px;
+    background:var(--text);
+  }
+  .channel.l input[type=range]::-moz-range-thumb{ background:var(--l-color); }
+  .channel.r input[type=range]::-moz-range-thumb{ background:var(--r-color); }
+
+  .ch-scale{
+    display:flex; justify-content:space-between;
+    font-family:'Space Mono', monospace; font-size:9.5px; color:var(--text-dim);
+    margin-top:2px;
+  }
+
+  .stepper{
+    display:flex; gap:8px; margin-top:12px;
+  }
+  .stepbtn{
+    flex:1;
+    font-family:'Space Mono', monospace;
+    font-size:12px;
+    padding:8px 0;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--panel-raised);
+    color:var(--text);
+    cursor:pointer;
+    transition:border-color .15s ease, transform .05s ease;
+  }
+  .channel.l .stepbtn:hover:not(:disabled){ border-color:var(--l-color); color:var(--l-color); }
+  .channel.r .stepbtn:hover:not(:disabled){ border-color:var(--r-color); color:var(--r-color); }
+  .stepbtn:active:not(:disabled){ transform:scale(0.96); }
+  .stepbtn:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .reset-row{
+    display:flex; justify-content:flex-end; gap:8px; margin-top:16px;
+  }
+  button{
+    font-family:'Zen Kaku Gothic New', sans-serif;
+    font-size:12.5px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    background:var(--panel-raised);
+    color:var(--text);
+    padding:8px 14px;
+    cursor:pointer;
+    transition:border-color .15s ease, color .15s ease;
+  }
+  button:hover:not(:disabled){ border-color:var(--text-dim); }
+  button:disabled{ opacity:.35; cursor:not-allowed; }
+  button.primary{
+    background:var(--r-color); border-color:var(--r-color); color:#20140a; font-weight:700;
+  }
+  button.primary:hover:not(:disabled){ filter:brightness(1.08); }
+
+  /* ---- transport ---- */
+  .transport{
+    display:flex; align-items:center; gap:14px;
+  }
+  .transport .tbtn{
+    width:44px; height:44px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--r-color); border:none; color:#20140a;
+    flex:none;
+  }
+  .transport .tbtn svg{ width:16px; height:16px; }
+  .seek-wrap{ flex:1; }
+  .seek-time{
+    display:flex; justify-content:space-between;
+    font-family:'Space Mono', monospace; font-size:11px; color:var(--text-dim);
+    margin-top:4px;
+  }
+  .vol{
+    display:flex; align-items:center; gap:8px; width:110px;
+  }
+  .vol svg{ width:15px; height:15px; color:var(--text-dim); flex:none; }
+
+  .processing{
+    display:none;
+    align-items:center; gap:10px;
+    font-family:'Space Mono', monospace;
+    font-size:11px; color:var(--r-color);
+    margin-top:14px;
+  }
+  .processing.show{ display:flex; }
+  .spinner{
+    width:12px; height:12px; border-radius:50%;
+    border:2px solid var(--line); border-top-color:var(--r-color);
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .note{
+    font-size:12px; line-height:1.8; color:var(--text-dim);
+    border-top:1px solid var(--line);
+    margin-top:22px; padding-top:16px;
+  }
+  .note b{ color:var(--text); }
+
+  footer{
+    text-align:center; font-size:11px; color:var(--text-dim);
+    font-family:'Space Mono', monospace; margin-top:30px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">Personal listening tool</div>
+  <h1>左右の耳で、<br>聴こえる<span>高さ</span>をそろえる。</h1>
+  <p class="lead">
+    左右チャンネルのピッチをそれぞれ独立して、セント単位で微調整できるプレーヤーです。
+    再生速度やテンポは変えずに、音の高さだけをずらします。右耳側を少し下げる、左耳側を少し上げる、
+    といった調整をしながら、自分にとって左右が同じ高さに聴こえるポイントを探してみてください。
+  </p>
+
+  <div class="panel">
+    <div class="panel-label">01 — Source</div>
+    <label class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept="audio/*">
+      <div class="reel"></div>
+      <div class="dz-text">
+        <b>音声ファイルを選択 / ドラッグ＆ドロップ</b>
+        <span>MP3, WAV, M4A など — ブラウザ内だけで処理され、外部には送信されません</span>
+      </div>
+    </label>
+    <div class="fileinfo" id="fileInfo"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">02 — Pitch balance</div>
+
+    <div class="meter">
+      <div class="meter-scale">
+        <div class="meter-ticks" id="ticks"></div>
+        <div class="meter-center"></div>
+        <div class="needle l" id="needleL" style="left:50%"></div>
+        <div class="needle r" id="needleR" style="left:50%"></div>
+      </div>
+      <div class="meter-labels"><span>-100cent</span><span>0</span><span>+100cent</span></div>
+    </div>
+
+    <div class="channels">
+      <div class="channel l">
+        <div class="ch-head">
+          <span class="name">LEFT</span>
+          <span class="value mono"><span id="lVal">0</span><span class="u">cent</span></span>
+        </div>
+        <input type="range" id="lSlider" min="-100" max="100" step="1" value="0" disabled>
+        <div class="ch-scale"><span>-100</span><span>0</span><span>+100</span></div>
+        <div class="stepper">
+          <button type="button" class="stepbtn" id="lMinus" disabled>−1cent</button>
+          <button type="button" class="stepbtn" id="lPlus" disabled>+1cent</button>
+        </div>
+      </div>
+      <div class="channel r">
+        <div class="ch-head">
+          <span class="name">RIGHT</span>
+          <span class="value mono"><span id="rVal">0</span><span class="u">cent</span></span>
+        </div>
+        <input type="range" id="rSlider" min="-100" max="100" step="1" value="0" disabled>
+        <div class="ch-scale"><span>-100</span><span>0</span><span>+100</span></div>
+        <div class="stepper">
+          <button type="button" class="stepbtn" id="rMinus" disabled>−1cent</button>
+          <button type="button" class="stepbtn" id="rPlus" disabled>+1cent</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="reset-row">
+      <button id="resetBtn" disabled>0centにリセット</button>
+      <button id="applyBtn" class="primary" disabled>この設定を適用</button>
+    </div>
+
+    <div class="processing" id="processing"><div class="spinner"></div><span>処理中…</span></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">03 — Playback</div>
+    <div class="transport">
+      <button class="tbtn" id="playBtn" disabled>
+        <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        <svg id="pauseIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      </button>
+      <div class="seek-wrap">
+        <input type="range" id="seekSlider" min="0" max="1000" step="1" value="0" disabled>
+        <div class="seek-time">
+          <span id="curTime" class="mono">0:00</span>
+          <span id="durTime" class="mono">0:00</span>
+        </div>
+      </div>
+      <div class="vol">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 10v4h4l5 5V5L7 10H3z"/></svg>
+        <input type="range" id="volSlider" min="0" max="100" step="1" value="80">
+      </div>
+    </div>
+  </div>
+
+  <p class="note">
+    <b>使い方のヒント：</b> まず両方とも 0cent の状態で聴き、次に右（あるいは左）のスライダーを少しずつ動かして、
+    左右の音が同じ高さに感じられる位置を探してください。数セント〜数十セント程度のずれであることが多いです。
+    スライダーを離すと自動で処理され、少し時間がかかる場合があります。<br>
+    これは聴きやすさのための調整ツールであり、医療機器ではありません。聴こえ方の変化が気になる場合は、耳鼻咽喉科での相談も検討してください。
+  </p>
+
+  <footer>PROCESSED LOCALLY IN YOUR BROWSER — NO UPLOAD</footer>
+</div>
+
+<script>
+(function(){
+  // ---------- ticks ----------
+  const ticks = document.getElementById('ticks');
+  for(let i=0;i<=20;i++){ const t=document.createElement('i'); ticks.appendChild(t); }
+
+  // ---------- audio context / state ----------
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioContextCtor();
+  const gainNode = ctx.createGain();
+  gainNode.connect(ctx.destination);
+  gainNode.gain.value = 0.8;
+
+  let originalBuffer = null;   // decoded AudioBuffer from file
+  let processedBuffer = null;  // pitch-shifted stereo buffer currently loaded for playback
+  let sourceNode = null;
+  let isPlaying = false;
+  let startedAtCtxTime = 0;    // ctx.currentTime when playback of processedBuffer started (at offset pausedAt)
+  let pausedAt = 0;            // seconds into processedBuffer
+  let rafId = null;
+
+  // ---------- DOM ----------
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileInfo = document.getElementById('fileInfo');
+  const lSlider = document.getElementById('lSlider');
+  const rSlider = document.getElementById('rSlider');
+  const lVal = document.getElementById('lVal');
+  const rVal = document.getElementById('rVal');
+  const needleL = document.getElementById('needleL');
+  const needleR = document.getElementById('needleR');
+  const lMinus = document.getElementById('lMinus');
+  const lPlus = document.getElementById('lPlus');
+  const rMinus = document.getElementById('rMinus');
+  const rPlus = document.getElementById('rPlus');
+  const resetBtn = document.getElementById('resetBtn');
+  const applyBtn = document.getElementById('applyBtn');
+  const processingEl = document.getElementById('processing');
+  const playBtn = document.getElementById('playBtn');
+  const playIcon = document.getElementById('playIcon');
+  const pauseIcon = document.getElementById('pauseIcon');
+  const seekSlider = document.getElementById('seekSlider');
+  const curTimeEl = document.getElementById('curTime');
+  const durTimeEl = document.getElementById('durTime');
+  const volSlider = document.getElementById('volSlider');
+
+  function fmtTime(s){
+    if(!isFinite(s) || s<0) s=0;
+    const m = Math.floor(s/60);
+    const sec = Math.floor(s%60);
+    return m+':'+String(sec).padStart(2,'0');
+  }
+
+  function updateMeter(){
+    const lc = parseFloat(lSlider.value);
+    const rc = parseFloat(rSlider.value);
+    needleL.style.left = (50 + (lc/100)*50) + '%';
+    needleR.style.left = (50 + (rc/100)*50) + '%';
+    lVal.textContent = (lc>0? '+':'')+lc;
+    rVal.textContent = (rc>0? '+':'')+rc;
+  }
+  lSlider.addEventListener('input', updateMeter);
+  rSlider.addEventListener('input', updateMeter);
+  updateMeter();
+
+  // ---------- DSP ----------
+  function hannWindow(size){
+    const w = new Float32Array(size);
+    for(let i=0;i<size;i++) w[i] = 0.5*(1-Math.cos(2*Math.PI*i/(size-1)));
+    return w;
+  }
+
+  function resampleLinear(input, ratio){
+    const outLen = Math.max(1, Math.floor(input.length/ratio));
+    const out = new Float32Array(outLen);
+    for(let i=0;i<outLen;i++){
+      const srcPos = i*ratio;
+      const idx = Math.floor(srcPos);
+      const frac = srcPos-idx;
+      const s0 = input[idx] || 0;
+      const s1 = (idx+1<input.length)? input[idx+1] : s0;
+      out[i] = s0 + (s1-s0)*frac;
+    }
+    return out;
+  }
+
+  function timeStretchOLA(input, stretchFactor, grainSize, overlap){
+    grainSize = grainSize || 4096;
+    overlap = overlap===undefined? 0.5 : overlap;
+    const hopA = Math.max(1, Math.floor(grainSize*(1-overlap)));
+    const hopS = Math.max(1, Math.round(hopA*stretchFactor));
+    const window = hannWindow(grainSize);
+    const outLen = Math.floor(input.length*stretchFactor) + grainSize;
+    const output = new Float32Array(outLen);
+    const norm = new Float32Array(outLen);
+    let inPos=0, outPos=0;
+    while(inPos+grainSize <= input.length){
+      for(let i=0;i<grainSize;i++){
+        const w = window[i];
+        output[outPos+i]+= input[inPos+i]*w;
+        norm[outPos+i]+= w*w;
+      }
+      inPos += hopA;
+      outPos += hopS;
+    }
+    for(let i=0;i<output.length;i++){
+      if(norm[i]>1e-6) output[i]/=norm[i];
+    }
+    return output;
+  }
+
+  function pitchShiftChannel(input, cents){
+    if(!cents) return input;
+    const ratio = Math.pow(2, cents/1200);
+    const resampled = resampleLinear(input, ratio);
+    const stretched = timeStretchOLA(resampled, ratio);
+    if(stretched.length >= input.length) return stretched.subarray(0, input.length);
+    const out = new Float32Array(input.length);
+    out.set(stretched);
+    return out;
+  }
+
+  function buildProcessedBuffer(centsL, centsR){
+    const chL = originalBuffer.getChannelData(0);
+    const chR = originalBuffer.numberOfChannels>1 ? originalBuffer.getChannelData(1) : chL;
+    const outL = pitchShiftChannel(chL, centsL);
+    const outR = pitchShiftChannel(chR, centsR);
+    const len = Math.min(outL.length, outR.length);
+    const buf = ctx.createBuffer(2, len, originalBuffer.sampleRate);
+    buf.getChannelData(0).set(outL.subarray(0,len));
+    buf.getChannelData(1).set(outR.subarray(0,len));
+    return buf;
+  }
+
+  function reprocess(){
+    if(!originalBuffer) return;
+    processingEl.classList.add('show');
+    applyBtn.disabled = true;
+    const wasPlaying = isPlaying;
+    const posSec = getCurrentPosition();
+    stopSource();
+    setTimeout(function(){
+      const centsL = parseFloat(lSlider.value);
+      const centsR = parseFloat(rSlider.value);
+      processedBuffer = buildProcessedBuffer(centsL, centsR);
+      pausedAt = Math.min(posSec, processedBuffer.duration);
+      durTimeEl.textContent = fmtTime(processedBuffer.duration);
+      updateSeekUI();
+      processingEl.classList.remove('show');
+      applyBtn.disabled = false;
+      if(wasPlaying) play();
+    }, 20);
+  }
+
+  // ---------- file loading ----------
+  dropzone.addEventListener('dragover', function(e){ e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', function(){ dropzone.classList.remove('drag'); });
+  dropzone.addEventListener('drop', function(e){
+    e.preventDefault(); dropzone.classList.remove('drag');
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', function(){
+    if(fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  function handleFile(file){
+    processingEl.classList.add('show');
+    const reader = new FileReader();
+    reader.onload = function(e){
+      ctx.decodeAudioData(e.target.result.slice(0), function(buf){
+        originalBuffer = buf;
+        fileInfo.textContent = file.name + '  ·  ' + fmtTime(buf.duration) + '  ·  ' + buf.sampleRate + 'Hz  ·  ' + (buf.numberOfChannels>1? 'stereo':'mono');
+        fileInfo.classList.add('show');
+        [lSlider, rSlider, lMinus, lPlus, rMinus, rPlus, resetBtn, applyBtn, playBtn, seekSlider].forEach(el=> el.disabled=false);
+        pausedAt = 0;
+        reprocess(); // keeps current L/R cent values — they carry over between files until the page is closed
+      }, function(err){
+        processingEl.classList.remove('show');
+        fileInfo.textContent = '読み込みに失敗しました。別のファイルをお試しください。';
+        fileInfo.classList.add('show');
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  lSlider.addEventListener('change', reprocess);
+  rSlider.addEventListener('change', reprocess);
+  applyBtn.addEventListener('click', reprocess);
+
+  function stepSlider(slider, delta){
+    const min = parseFloat(slider.min), max = parseFloat(slider.max);
+    let v = parseFloat(slider.value) + delta;
+    v = Math.max(min, Math.min(max, v));
+    slider.value = v;
+    updateMeter();
+    reprocess();
+  }
+  lMinus.addEventListener('click', function(){ stepSlider(lSlider, -1); });
+  lPlus.addEventListener('click', function(){ stepSlider(lSlider, 1); });
+  rMinus.addEventListener('click', function(){ stepSlider(rSlider, -1); });
+  rPlus.addEventListener('click', function(){ stepSlider(rSlider, 1); });
+  resetBtn.addEventListener('click', function(){
+    lSlider.value = 0; rSlider.value = 0; updateMeter(); reprocess();
+  });
+
+  // ---------- playback ----------
+  function stopSource(){
+    if(sourceNode){
+      sourceNode.onended = null;
+      try{ sourceNode.stop(); }catch(e){}
+      sourceNode = null;
+    }
+    isPlaying = false;
+    playIcon.style.display='block'; pauseIcon.style.display='none';
+    if(rafId) cancelAnimationFrame(rafId);
+  }
+
+  function getCurrentPosition(){
+    if(isPlaying) return ctx.currentTime - startedAtCtxTime;
+    return pausedAt;
+  }
+
+  function play(){
+    if(!processedBuffer) return;
+    if(ctx.state==='suspended') ctx.resume();
+    sourceNode = ctx.createBufferSource();
+    sourceNode.buffer = processedBuffer;
+    sourceNode.connect(gainNode);
+    const offset = Math.min(pausedAt, processedBuffer.duration - 0.01);
+    sourceNode.start(0, Math.max(0,offset));
+    startedAtCtxTime = ctx.currentTime - offset;
+    isPlaying = true;
+    playIcon.style.display='none'; pauseIcon.style.display='block';
+    sourceNode.onended = function(){
+      if(isPlaying){
+        isPlaying = false; pausedAt = 0;
+        playIcon.style.display='block'; pauseIcon.style.display='none';
+        updateSeekUI();
+      }
+    };
+    tick();
+  }
+
+  function pause(){
+    if(!isPlaying) return;
+    pausedAt = ctx.currentTime - startedAtCtxTime;
+    stopSource();
+    updateSeekUI();
+  }
+
+  playBtn.addEventListener('click', function(){
+    if(!processedBuffer) return;
+    if(isPlaying) pause(); else play();
+  });
+
+  function updateSeekUI(){
+    const dur = processedBuffer? processedBuffer.duration : 0;
+    const pos = getCurrentPosition();
+    seekSlider.value = dur>0 ? Math.round((pos/dur)*1000) : 0;
+    curTimeEl.textContent = fmtTime(pos);
+    durTimeEl.textContent = fmtTime(dur);
+  }
+
+  function tick(){
+    if(!isPlaying) return;
+    updateSeekUI();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  let seeking = false;
+  seekSlider.addEventListener('mousedown', function(){ seeking=true; });
+  seekSlider.addEventListener('touchstart', function(){ seeking=true; });
+  seekSlider.addEventListener('input', function(){
+    if(!processedBuffer) return;
+    const dur = processedBuffer.duration;
+    const pos = (seekSlider.value/1000)*dur;
+    curTimeEl.textContent = fmtTime(pos);
+  });
+  seekSlider.addEventListener('change', function(){
+    if(!processedBuffer) return;
+    const dur = processedBuffer.duration;
+    pausedAt = (seekSlider.value/1000)*dur;
+    seeking = false;
+    if(isPlaying){ stopSource(); play(); } else { updateSeekUI(); }
+  });
+
+  volSlider.addEventListener('input', function(){
+    gainNode.gain.value = volSlider.value/100;
+  });
+
+})();
+</script>
+</body>
+</html>
